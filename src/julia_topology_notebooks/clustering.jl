@@ -4,7 +4,7 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 4bedfab4-6f06-11f0-2658-f9ae1ac4c738
+# ╔═╡ 10f60794-6f10-11f0-3fb1-23e8e6f6f130
 begin
 using MAT
 	
@@ -17,206 +17,55 @@ using MAT
 	vectors = read(file, "vector")
 	
 	close(file)
-end
 
-# ╔═╡ 9ca3a7f3-d279-44bf-877c-835028c36f38
-begin
 	mask = (status .== "significant") .& (brain_area .== "VISp")
 	significant_visp_vectors = vectors[mask, :]
 end
 
-# ╔═╡ 7930f978-f260-4ce0-b7d4-1a50584491b6
+# ╔═╡ 28ddecc6-011a-4dff-8738-973d5447448c
 begin
-		
-	# Perform hierarchical clustering
-	# Calculate distance matrix (using Euclidean distance by default)
-	dist_matrix = pairwise(Euclidean(), significant_visp_vectors, dims=1)
+	# Pkg.add.(["Statistics", "Clustering", "StatsPlots"])  # run once if needed
+	using Statistics, Clustering, StatsPlots
 	
-	# Perform hierarchical clustering using Ward's method
-	hc = hclust(dist_matrix, linkage=:ward)
-	
-	# Create dendrogram plot
-	dendro_plot = plot(hc, xticks=false, label="", title="Hierarchical Clustering Dendrogram")
-	
-	# Reorder data based on clustering
-	reordered_indices = hc.order
-	reordered_data = significant_visp_vectors[reordered_indices, :]
-	
-	# Create heatmap with clustered data
-	heatmap_plot = heatmap(
-	    reordered_data',
-	    title="Clustered Heatmap of Significant VISp Vectors",
-	    xlabel="Samples (reordered by clustering)",
-	    ylabel="Features",
-	    color=:viridis,
-	    colorbar_title="Value",
-	    size=(800, 600)
-	)
-	
-	# Display both plots
-	plot(dendro_plot, heatmap_plot, layout=(2,1), size=(800, 800))
-	
-	# Alternative: Create a more integrated view with dendrogram on the side
-	# This requires more complex plotting but gives a cleaner visualization
-	function plot_clustered_heatmap_with_dendrogram(data, hc)
-	    # Create figure with subplots
-	    l = @layout [
-	        a{0.2w} b
-	    ]
-	   
-	    # Plot dendrogram horizontally
-	    dendro = plot(
-	        hc,
-	        orientation=:horizontal,
-	        xticks=false,
-	        yticks=false,
-	        label="",
-	        xlims=(0, maximum(hc.height)*1.1)
-	    )
-	   
-	    # Plot heatmap
-	    hmap = heatmap(
-	        data[hc.order, :]',
-	        yticks=false,
-	        xlabel="Samples",
-	        ylabel="Features",
-	        color=:viridis,
-	        colorbar=true
-	    )
-	   
-	    # Combine plots
-	    plot(dendro, hmap, layout=l, size=(1000, 600))
-	end
-	
-	# Create the integrated visualization
-	integrated_plot = plot_clustered_heatmap_with_dendrogram(significant_visp_vectors, hc)
-	
-	# Optional: Cut the dendrogram to form clusters
-	# For example, to get 5 clusters:
-	n_clusters = 5
-	cluster_assignments = cutree(hc, k=n_clusters)
-	
-	# Create heatmap with cluster annotations
-	cluster_colors = palette(:tab10, n_clusters)
-	cluster_bar = heatmap(
-	    reshape(cluster_assignments[reordered_indices], 1, :),
-	    color=cluster_colors,
-	    colorbar=false,
-	    yticks=false,
-	    xlabel="",
-	    ylabel="Clusters"
-	)
-	
-	# Combined plot with cluster bar
-	annotated_plot = plot(
-	    cluster_bar,
-	    heatmap_plot,
-	    layout=grid(2, 1, heights=[0.05, 0.95]),
-	    size=(800, 700)
-	)
-	
-	# Save the plots if needed
-	# savefig(integrated_plot, "hierarchical_clustering_heatmap.png")
-	# savefig(annotated_plot, "annotated_clustering_heatmap.png")
-end
-
-# ╔═╡ c2d6c2ef-93b8-47e7-8f56-445a4a302e88
-
-
-# ╔═╡ da8ebe4d-9162-4582-a97e-4f04f3034920
-
-
-# ╔═╡ 614bf89d-38de-4f42-b972-79a2e7cb5a47
-begin
-	# Pkg.add.(["Statistics", "Distances", "Clustering", "StatsPlots"])  # run once if needed
-	using Statistics, Distances, Clustering, StatsPlots
-	
-	# starting from your subset:
-	# significant_visp_vectors = vectors[mask, :]
-	
-	# 1) Ensure numeric matrix and z-score each column (robust to StatsBase versions)
+	# Rows = neurons, columns = features
 	X = Matrix(significant_visp_vectors)
 	
-	μ = mean(X, dims=1)
-	σ = std(X, dims=1; corrected=true)
-	σ .= ifelse.(σ .== 0, 1.0, σ)          # avoid divide-by-zero if a column is constant
-	Xz = (X .- μ) ./ σ                     # column-wise z-scores
+	# (Optional) drop rows with zero variance across features (correlation would be NaN)
+	rowσ = std(X, dims=2; corrected=true)
+	keep = vec(rowσ .> 0)
+	X = X[keep, :]
 	
-	# (If you prefer StatsBase and your version supports positional dims:
-	# using StatsBase
-	# Xz = zscore(X, 1)   # columns
-	# )
+	# 1) Neuron–neuron similarity: Pearson correlation across features
+	S = cor(permutedims(X))        # NxN correlation of rows
+	replace!(S, NaN => 0.0)        # just in case
 	
-	# 2) Pairwise distances for rows and columns
-	D_rows = pairwise(Euclidean(), Xz; dims=1)  # distances between samples (rows)
-	D_cols = pairwise(Euclidean(), Xz; dims=2)  # distances between features (cols)
+	# 2) Convert to distance for clustering and get dendrogram order
+	D = 1 .- S                     # correlation distance in [0, 2]
+	for i in 1:size(D,1); D[i,i] = 0.0; end  # ensure zero diagonal
+	hc = hclust(D, linkage = :average)       # average/complete work well with correlation distances
+	ord = hc.order
 	
-	# 3) Hierarchical clustering (Ward)
-	hc_rows = hclust(D_rows, linkage = :ward)
-	hc_cols = hclust(D_cols, linkage = :ward)
-	
-	# 4) Reorder by dendrogram leaf order
-	row_order = hc_rows.order
-	col_order = hc_cols.order
-	Xz_ord = Xz[row_order, col_order]
-	
-	# 5) Heatmap
-	default(size=(900, 650))
+	# 3) Reorder similarity matrix and plot
+	S_ord = S[ord, ord]
+	default(size=(840, 840))
 	heatmap(
-	    Xz_ord;
-	    xlabel = "Features (clustered)",
-	    ylabel = "Samples (clustered)",
-	    colorbar_title = "z-score",
-	    yflip = true,           # first sample at the top
-	    aspect_ratio = :auto,
-	    right_margin = 5Plots.mm
-	)
-	
-end
-
-# ╔═╡ 367c7477-39d7-4a6b-a3b2-7d53fcc05396
-begin
-	
-	# X is your matrix (rows = samples). From before:
-	X = Matrix(significant_visp_vectors)
-	
-	# z-score columns
-	μ = mean(X, dims=1); σ = std(X, dims=1; corrected=true); σ .= ifelse.(σ .== 0, 1, σ)
-	Xz = (X .- μ) ./ σ
-	
-	# --- try correlation distance for rows (often clearer) ---
-	D_rows = pairwise(CorrelationDist(), Xz; dims=1)  # distances between rows
-	D_cols = pairwise(Euclidean(),        Xz; dims=2)  # distances between columns
-	
-	hc_rows = hclust(D_rows, linkage=:ward)
-	hc_cols = hclust(D_cols, linkage=:ward)
-	
-	row_order = hc_rows.order
-	col_order = hc_cols.order
-	Xz_ord = Xz[row_order, col_order]
-	
-	# (A) sanity check: are neighboring rows in the clustered order closer than random?
-	adj = [D_rows[row_order[i], row_order[i+1]] for i in 1:length(row_order)-1]
-	adj_mean = mean(adj)
-	rand_order = randperm(size(X,1))
-	adj_rand = [D_rows[rand_order[i], rand_order[i+1]] for i in 1:length(rand_order)-1]
-	adj_rand_mean = mean(adj_rand)
-	@info "Mean adjacent row distance (clustered) = $adj_mean vs random = $adj_rand_mean"
-	
-	# (B) visualize the row dendrogram to confirm ordering exists
-	plot(hc_rows; xticks=false, yflip=true, size=(900,250), xlabel="samples", ylabel="height")
-	
-	# (C) heatmap with the clustered order
-	default(size=(900, 650))
-	heatmap(
-	    Xz_ord;
-	    xlabel="Features (clustered)",
-	    ylabel="Samples (clustered)",
-	    colorbar_title="z-score",
+	    S_ord;
+	    xlabel="Neurons (clustered)",
+	    ylabel="Neurons (clustered)",
+	    colorbar_title="Correlation",
 	    yflip=true,
-	    aspect_ratio=:auto
+	    aspect_ratio=1,
+	    clims=(-1, 1)
 	)
-
+	
+	# --- Optional: draw cluster block boundaries (choose k) ---
+	k = 8
+	labels = cutree(hc, k)[ord]
+	edges = findall(diff(labels) .!= 0)
+	for e in edges
+	    hline!([e + 0.5], lw=1, color=:black, alpha=0.6)
+	    vline!([e + 0.5], lw=1, color=:black, alpha=0.6)
+	end
 	
 end
 
@@ -224,14 +73,12 @@ end
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
-Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
 MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
 
 [compat]
 Clustering = "~0.15.8"
-Distances = "~0.10.12"
 MAT = "~0.10.7"
 StatsPlots = "~0.15.7"
 """
@@ -242,7 +89,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.11.5"
 manifest_format = "2.0"
-project_hash = "6a7434d34315f4fc07bcb37032ae0d1b22cf826f"
+project_hash = "bd072e58acc02a3f7826ef9a0276d4ae45eb5f0f"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1733,12 +1580,7 @@ version = "1.9.2+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═4bedfab4-6f06-11f0-2658-f9ae1ac4c738
-# ╠═9ca3a7f3-d279-44bf-877c-835028c36f38
-# ╠═614bf89d-38de-4f42-b972-79a2e7cb5a47
-# ╠═367c7477-39d7-4a6b-a3b2-7d53fcc05396
-# ╠═7930f978-f260-4ce0-b7d4-1a50584491b6
-# ╠═c2d6c2ef-93b8-47e7-8f56-445a4a302e88
-# ╠═da8ebe4d-9162-4582-a97e-4f04f3034920
+# ╠═10f60794-6f10-11f0-3fb1-23e8e6f6f130
+# ╠═28ddecc6-011a-4dff-8738-973d5447448c
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

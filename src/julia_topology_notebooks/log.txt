@@ -1,0 +1,13 @@
+┌ Warning: Found `resolution` in the theme when creating a `Scene`. The `resolution` keyword for `Scene`s and `Figure`s has been deprecated. Use `Figure(; size = ...` or `Scene(; size = ...)` instead, which better reflects that this is a unitless size and not a pixel resolution. The key could also come from `set_theme!` calls or related theming functions.
+└ @ Makie ~/.julia/packages/Makie/6zcxH/src/scenes.jl:264
+ERROR: LoadError: BoundsError: attempt to access 3-element Vector{PersistenceDiagrams.PersistenceDiagram} at index [0]
+Stacktrace:
+ [1] throw_boundserror(A::Vector{PersistenceDiagrams.PersistenceDiagram}, I::Tuple{Int64})
+   @ Base ./essentials.jl:14
+ [2] getindex(A::Vector{PersistenceDiagrams.PersistenceDiagram}, i::Int64)
+   @ Base ./essentials.jl:916
+ [3] top-level scope
+   @ ~/LuckyMouse4/src/julia_topology_notebooks/analyze_neuron_geometry.jl:42
+in expression starting at /home/maria/LuckyMouse4/src/julia_topology_notebooks/analyze_neuron_geometry.jl:40
+Loaded 831 vectors of dimension 1000
+Running Ripserer...
