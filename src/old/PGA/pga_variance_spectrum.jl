@@ -60,3 +60,4 @@ title!("PGA Variance Spectrum – $(BRAIN_REGION)")
 
 savefig(SAVE_PATH)
 println("✅ Plot saved to $SAVE_PATH")
+¸¸

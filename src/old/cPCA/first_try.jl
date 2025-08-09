@@ -59,8 +59,9 @@ save("cpga_visp_projection_sweep.png", fig)
 
 # ─── Optional: Compare with Standard PGA Cosine Overlap ───────────────────────
 using LinearAlgebra: dot, norm
-α = 1.0  # or 0.5 or any Float64 you want to try
-W_c = contrastive_pga(log_sig, log_non, α, k)
+U_pga, _, _ = contrastive_pga(C_sig, zero(C_sig), k)
 U_c, _ = contrastive_pga(C_sig, C_non, 1.0, k)
 cos_sim = [abs(dot(U_pga[:, i], U_c[:, i])) / (norm(U_pga[:, i]) * norm(U_c[:, i])) for i in 1:k]
 println("Cosine similarity between PGA and cPGA basis (alpha=1):", cos_sim)
+
+

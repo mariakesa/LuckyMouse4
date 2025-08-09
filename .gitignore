@@ -211,3 +211,5 @@ data/
 sig_neuron_areas.npy
 
 fewshot_weight_vectors.npy
+
+cluster_centers.npy
